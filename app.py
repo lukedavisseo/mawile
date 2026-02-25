@@ -2,15 +2,18 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "marimo",
-#     "numpy",
-#     "polars"
+#     "numpy==1.26.4",
+#     "polars-lts-cpu",
 # ]
 # ///
 
 import marimo
 
 __generated_with = "0.20.2"
-app = marimo.App(width="medium")
+app = marimo.App(
+    width="medium",
+    app_title="mawile (Meaningful Anchor [Tags] With Internal Links + Embeddings)",
+)
 
 
 @app.cell
@@ -25,11 +28,12 @@ def _():
 @app.cell
 def _(np):
     # via https://earthly.dev/blog/cosine_similarity_text_embeddings/
-    def cosine_similarity(vector_a, vector_b):
+    def cosine_similarity(vector_a, vector_b) -> np.float64:
         dot_product = np.dot(vector_a, vector_b)
         magnitude_a = np.linalg.norm(vector_a)
         magnitude_b = np.linalg.norm(vector_b)
         return dot_product / (magnitude_a * magnitude_b)
+
 
     return (cosine_similarity,)
 
@@ -50,7 +54,7 @@ def _(mo):
 
 @app.cell
 def _(mo):
-    uploader = mo.ui.file(kind='area', filetypes=[".csv"])
+    uploader = mo.ui.file(kind='area', filetypes=[".csv", ".parquet"])
 
     uploader
     return (uploader,)
@@ -58,27 +62,34 @@ def _(mo):
 
 @app.cell
 def _(pl, uploader):
-    # The dataframe that shows the uploaded data
-    df = (
-        pl.read_csv(uploader.contents())
-        .with_columns(
+    # Strip titles of separators and brand names
+    def clean_titles(df):
+        return df.with_columns(
             pl.col('Title').str.replace(' [|-–].*', '')
         )
-    )
+
+    # Converts CSV embedding column to an Array dtype
+    def convert_str_to_array(df):
+        return df.with_columns(
+            pl.col("embedding").str.split(",")
+            .cast(pl.Array(pl.Float32, 768))
+        )
+
+    # Checks if you've uploaded a CSV or a parquet file so it can load it accordingly
+    if ".csv" in uploader.name():
+        df = pl.read_csv(uploader.contents()).pipe(clean_titles).pipe(convert_str_to_array)
+    else:
+        df = pl.read_parquet(uploader.contents()).pipe(clean_titles)
     return (df,)
 
 
-@app.cell(hide_code=True)
-def _(mo):
-    uploaded_data_table_text=mo.md(r"""
+@app.cell
+def _(df, mo):
+    uploaded_data_table_text = mo.md(r"""
     ## Uploaded data table
     Select the row you want to match against the rest of the pages to find your internal linking opportunities.
     """)
-    return (uploaded_data_table_text,)
 
-
-@app.cell
-def _(df, mo, uploaded_data_table_text):
     # This transforms the data into a table with selectable rows
     embeds_table = mo.ui.table(df, selection="single")
 
