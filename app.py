@@ -3,7 +3,7 @@
 # dependencies = [
 #     "marimo",
 #     "numpy==1.26.4",
-#     "polars-lts-cpu",
+#     "polars",
 # ]
 # ///
 
