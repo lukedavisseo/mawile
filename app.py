@@ -47,7 +47,7 @@ def _(mo):
 
     ### mawile is a marimo app that recommends pages for internal linking based on cosine similarity between embeddings.
 
-    To start, drag and drop or upload a file that contains site data (titles, meta descriptions, H1s-H5s, links, copy, etc.) and embeddings. The file can be in a CSV or Parquet format.
+    To start, drag and drop or upload a file that contains site data (titles, meta descriptions, H1s-H5s, links, copy, etc.) and embeddings. The file must be in CSV format.
     """)
     return
 
