@@ -13,7 +13,7 @@
 
 # Demo
 
-Coming soon...
+You can try it for yourself here: [https://lukedavisseo.github.io/mawile/](https://lukedavisseo.github.io/mawile/)
 
 # Example use cases
 
