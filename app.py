@@ -103,22 +103,25 @@ def _(df, mo):
 def _(cosine_similarity, df, embeds_table, pl, slider):
     # The `filtered` function generates similarity scores between the row selected in `embeds_table` and every row in the dataframe. It then filters the dataframe by any similarity scores over a threshold, set by the threshold slider
 
+    col_names = list(df.schema.keys())
+
     def filtered(df, threshold):
         return (
             df.with_columns(
                 (pl.col("embedding").map_elements(
-                    lambda x: cosine_similarity(x, target_vector)
+                    lambda x: cosine_similarity(x.to_numpy(allow_copy=False, writable=False), target_vector),
+                    return_dtype=pl.Float64
                 ) * 100).round(2).alias("Similarity Score")
         )
-        .filter((pl.col("Similarity Score") >= slider.value) & (pl.col("URL") != target_url))
+        .filter((pl.col("Similarity Score") >= slider.value) & (pl.col(col_names[0]) != target_url))
         .sort("Similarity Score", descending=True)
-        .select(["URL", "Title", "Similarity Score"])
+        .select(col_names[:-1])
     )
 
     # `target_url` is the URL from the `embeds_table` selected row and `target_vector` gets the corresponding embedding array
 
-    target_url = embeds_table.value['URL'][0]
-    target_vector = df.filter(pl.col("URL") == target_url).select("embedding").item()
+    target_url = embeds_table.value[col_names[0]][0]
+    target_vector = df.filter(pl.col(col_names[0]) == target_url).select("embedding").item().to_numpy()
     return (filtered,)
 
 
@@ -157,8 +160,8 @@ def _(df, embeds_table, exclude, filtered, mo, pl, regex_check):
             )
 
     mo.vstack([
-        mo.md(f"## Pages similar to: {embeds_table.value['Title'][0]}"),
-        mo.md(f"{embeds_table.value['URL'][0]}"),
+        mo.md(f"## Pages similar to: {embeds_table.value[col_names[1]][0]}"),
+        mo.md(f"{embeds_table.value[col_names[0]][0]}"),
         filtered_df
     ])
     return
