@@ -77,9 +77,9 @@ def _(pl, uploader):
 
     # Checks if you've uploaded a CSV or a parquet file so it can load it accordingly
     if ".csv" in uploader.name():
-        df = pl.read_csv(uploader.contents()).pipe(clean_titles).pipe(convert_str_to_array)
+        df = pl.read_csv(uploader.contents()).pipe(convert_str_to_array)
     else:
-        df = pl.read_parquet(uploader.contents()).pipe(clean_titles)
+        df = pl.read_parquet(uploader.contents())
     return (df,)
 
 
