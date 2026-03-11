@@ -109,7 +109,7 @@ def _(cosine_similarity, df, embeds_table, pl, slider):
         return (
             df.with_columns(
                 (pl.col("embedding").map_elements(
-                    lambda x: cosine_similarity(x.to_numpy(allow_copy=False, writable=False), target_vector),
+                    lambda x: cosine_similarity(x, target_vector),
                     return_dtype=pl.Float64
                 ) * 100).round(2).alias("Similarity Score")
         )
@@ -121,7 +121,7 @@ def _(cosine_similarity, df, embeds_table, pl, slider):
     # `target_url` is the URL from the `embeds_table` selected row and `target_vector` gets the corresponding embedding array
 
     target_url = embeds_table.value[col_names[0]][0]
-    target_vector = df.filter(pl.col(col_names[0]) == target_url).select("embedding").item().to_numpy()
+    target_vector = df.filter(pl.col(col_names[0]) == target_url).select("embedding").item()
     return (filtered,)
 
 
