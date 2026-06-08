@@ -2,18 +2,15 @@
 # requires-python = ">=3.12"
 # dependencies = [
 #     "marimo",
-#     "numpy==1.26.4",
-#     "polars==1.38.1",
+#     "numpy",
+#     "polars"
 # ]
 # ///
 
 import marimo
 
-__generated_with = "0.20.2"
-app = marimo.App(
-    width="medium",
-    app_title="mawile (Meaningful Anchor [Tags] With Internal Links + Embeddings)",
-)
+__generated_with = "0.23.8"
+app = marimo.App(width="medium")
 
 
 @app.cell
@@ -25,15 +22,14 @@ def _():
     return mo, np, pl
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(np):
     # via https://earthly.dev/blog/cosine_similarity_text_embeddings/
-    def cosine_similarity(vector_a, vector_b) -> np.float64:
+    def cosine_similarity(vector_a, vector_b):
         dot_product = np.dot(vector_a, vector_b)
         magnitude_a = np.linalg.norm(vector_a)
         magnitude_b = np.linalg.norm(vector_b)
         return dot_product / (magnitude_a * magnitude_b)
-
 
     return (cosine_similarity,)
 
@@ -47,12 +43,12 @@ def _(mo):
 
     ### mawile is a marimo app that recommends pages for internal linking based on cosine similarity between embeddings.
 
-    To start, drag and drop or upload a file that contains site data (titles, meta descriptions, H1s-H5s, links, copy, etc.) and embeddings. The file must be in CSV format.
+    To start, drag and drop or upload a file that contains site data (titles, meta descriptions, H1s-H5s, links, copy, etc.) and embeddings. The file can be in a CSV or Parquet format.
     """)
     return
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
     uploader = mo.ui.file(kind='area', filetypes=[".csv", ".parquet"])
 
@@ -60,13 +56,9 @@ def _(mo):
     return (uploader,)
 
 
-@app.cell
-def _(pl, uploader):
-    # Strip titles of separators and brand names
-    def clean_titles(df):
-        return df.with_columns(
-            pl.col('Title').str.replace(' [|-–].*', '')
-        )
+@app.cell(hide_code=True)
+def _(mo, pl, uploader):
+    mo.stop(not uploader.contents())
 
     # Converts CSV embedding column to an Array dtype
     def convert_str_to_array(df):
@@ -83,13 +75,17 @@ def _(pl, uploader):
     return (df,)
 
 
-@app.cell
-def _(df, mo):
-    uploaded_data_table_text = mo.md(r"""
+@app.cell(hide_code=True)
+def _(mo):
+    uploaded_data_table_text=mo.md(r"""
     ## Uploaded data table
     Select the row you want to match against the rest of the pages to find your internal linking opportunities.
     """)
+    return (uploaded_data_table_text,)
 
+
+@app.cell(hide_code=True)
+def _(df, mo, uploaded_data_table_text):
     # This transforms the data into a table with selectable rows
     embeds_table = mo.ui.table(df, selection="single")
 
@@ -99,7 +95,7 @@ def _(df, mo):
     return (embeds_table,)
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(cosine_similarity, df, embeds_table, pl, slider):
     # The `filtered` function generates similarity scores between the row selected in `embeds_table` and every row in the dataframe. It then filters the dataframe by any similarity scores over a threshold, set by the threshold slider
 
@@ -109,7 +105,7 @@ def _(cosine_similarity, df, embeds_table, pl, slider):
         return (
             df.with_columns(
                 (pl.col("embedding").map_elements(
-                    lambda x: cosine_similarity(x, target_vector),
+                    lambda x: cosine_similarity(x.to_numpy(allow_copy=False, writable=False), target_vector),
                     return_dtype=pl.Float64
                 ) * 100).round(2).alias("Similarity Score")
         )
@@ -118,22 +114,27 @@ def _(cosine_similarity, df, embeds_table, pl, slider):
         .select(col_names[:-1])
     )
 
+    def remove_existing_links(df, link_pairs_list):
+        return df.filter(
+            pl.col("URL").str.contains_any(link_pairs_list)
+        )
+
     # `target_url` is the URL from the `embeds_table` selected row and `target_vector` gets the corresponding embedding array
 
     target_url = embeds_table.value[col_names[0]][0]
     target_vector = df.filter(pl.col(col_names[0]) == target_url).select("embedding").item()
-    return (filtered,)
+    return col_names, filtered, remove_existing_links
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(mo):
-    slider = mo.ui.slider(0, 100, label="Similarity threshold", debounce=False, show_value=True)
+    slider = mo.ui.slider(0, 100, label="Similarity threshold", value=80, debounce=False, show_value=True)
     exclude = mo.ui.text(label="URL/subfolder to exclude", debounce=False)
     regex_check = mo.ui.checkbox(label="Check to use regex")
     return exclude, regex_check, slider
 
 
-@app.cell
+@app.cell(hide_code=True)
 def _(exclude, mo, regex_check, slider):
     mo.sidebar(
         mo.Html("""<details><summary><strong>How the parameters work</strong></summary>
@@ -147,8 +148,24 @@ def _(exclude, mo, regex_check, slider):
 
 
 @app.cell
-def _(df, embeds_table, exclude, filtered, mo, pl, regex_check):
+def _(
+    col_names,
+    df,
+    embeds_table,
+    exclude,
+    filtered,
+    mo,
+    pl,
+    regex_check,
+    remove_existing_links,
+):
     # This displays the final results and checks whether the regex filter is on or off
+
+    schema = ["Linking URL", "Target URL"]
+
+    link_df = pl.scan_csv(
+        '/Users/lukealexdavis/Downloads/www_tensar_co_uk_links20260603143836.csv'
+    ).collect().select(schema)
 
     if regex_check.value:
         filtered_df = df.pipe(filtered, 0.8).filter(
@@ -159,11 +176,30 @@ def _(df, embeds_table, exclude, filtered, mo, pl, regex_check):
                 ~pl.col("URL").str.contains(exclude.value, literal=True) if exclude.value else True
             )
 
+    link_pairs = [(embeds_table.value['URL'][0], filtered_df['URL'][i]) for i in range(filtered_df.shape[0])]
+
+    link_pairs_df = pl.DataFrame(link_pairs, orient="row", schema=schema).join(
+        link_df,
+        on=schema,
+        how="anti"
+    )
+
     mo.vstack([
         mo.md(f"## Pages similar to: {embeds_table.value[col_names[1]][0]}"),
         mo.md(f"{embeds_table.value[col_names[0]][0]}"),
-        filtered_df
+        filtered_df.pipe(remove_existing_links, link_pairs_df['Target URL'].to_list())
     ])
+    return
+
+
+@app.cell(hide_code=True)
+def _():
+    # (link_df.join(
+    #     pl.DataFrame(link_pairs, orient="row", schema=schema), 
+    #     on = schema, 
+    #     how = "anti"
+    #    )
+    # )
     return
 
 
