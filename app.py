@@ -84,6 +84,20 @@ def _(mo):
     return (uploaded_data_table_text,)
 
 
+@app.cell
+def _(mo):
+    link_pairs_uploader = mo.ui.file(kind='area', filetypes=[".csv", ".parquet"])
+
+    mo.vstack([
+        mo.md('''
+        ## Existing links
+        Upload a Sitebulb link report for the site. This will remove any existing links from the matches.
+        '''),
+        link_pairs_uploader  
+    ])
+    return (link_pairs_uploader,)
+
+
 @app.cell(hide_code=True)
 def _(df, mo, uploaded_data_table_text):
     # This transforms the data into a table with selectable rows
@@ -154,17 +168,20 @@ def _(
     embeds_table,
     exclude,
     filtered,
+    link_pairs_uploader,
     mo,
     pl,
     regex_check,
     remove_existing_links,
 ):
+    mo.stop(not link_pairs_uploader.contents(), mo.callout('Please upload a link report', kind='warn'))
+
     # This displays the final results and checks whether the regex filter is on or off
 
     schema = ["Linking URL", "Target URL"]
 
     link_df = pl.scan_csv(
-        '/Users/lukealexdavis/Downloads/www_tensar_co_uk_links20260603143836.csv'
+        link_pairs_uploader.contents()
     ).collect().select(schema)
 
     if regex_check.value:
