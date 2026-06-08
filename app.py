@@ -110,23 +110,27 @@ def _(df, mo, uploaded_data_table_text):
 
 
 @app.cell(hide_code=True)
-def _(cosine_similarity, df, embeds_table, pl, slider):
+def _(cosine_similarity, df, embeds_table, np, pl, slider):
     # The `filtered` function generates similarity scores between the row selected in `embeds_table` and every row in the dataframe. It then filters the dataframe by any similarity scores over a threshold, set by the threshold slider
 
     col_names = list(df.schema.keys())
 
     def filtered(df, threshold):
+        embeddings = df["embedding"].to_list()
+    
+        scores = [
+            round(cosine_similarity(np.asarray(x), target_vector) * 100, 2)
+            for x in embeddings
+        ]
+    
         return (
             df.with_columns(
-                (pl.col("embedding").map_elements(
-                    lambda x: cosine_similarity(x.to_numpy(allow_copy=False, writable=False), target_vector),
-                    return_dtype=pl.Float64
-                ) * 100).round(2).alias("Similarity Score")
+                pl.Series("Similarity Score", scores, dtype=pl.Float64)
+            )
+            .filter((pl.col("Similarity Score") >= slider.value) & (pl.col(col_names[0]) != target_url))
+            .sort("Similarity Score", descending=True)
+            .select(col_names[:-1])
         )
-        .filter((pl.col("Similarity Score") >= slider.value) & (pl.col(col_names[0]) != target_url))
-        .sort("Similarity Score", descending=True)
-        .select(col_names[:-1])
-    )
 
     def remove_existing_links(df, link_pairs_list):
         return df.filter(
