@@ -9,7 +9,7 @@
 
 import marimo
 
-__generated_with = "0.23.8"
+__generated_with = "0.23.16"
 app = marimo.App(width="medium")
 
 
@@ -41,9 +41,29 @@ def _(mo):
         <span style="height:32px;vertical-align: text-top;"><img src="https://camo.githubusercontent.com/3196d67bada8c480b50d9acb20145418be00a3c8a7294ae8266e135a1cb771b5/68747470733a2f2f696d672e706f6b656d6f6e64622e6e65742f737072697465732f656d6572616c642f6261636b2d7368696e792f6d6177696c652e706e67" width="32" height="32" style="display:inline;margin:0;padding:0" /></span>
     </h1>
 
-    ### mawile is a marimo app that recommends pages for internal linking based on cosine similarity between embeddings.
+    ### a marimo app that recommends internal links using embeddings.
+    """)
+    return
 
-    To start, drag and drop or upload a file that contains site data (titles, meta descriptions, H1s-H5s, links, copy, etc.) and embeddings. The file can be in a CSV or Parquet format.
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    mawile takes URLs, metadata, and generated embeddings and calculates [cosine similarities](https://www.ibm.com/think/topics/cosine-similarity) to find potential internal links.
+
+    To start, you will need:
+    - A CSV that contains URLs, metadata (meta titles and meta descriptions), and embeddings for each URL. You can include other relevant data such a page copy or tags but this may impact the final results.
+    - A CSV of every internal link on the site. Make sure each link and page returns a 200 status code and all pages are self-canonicalised.
+
+    You can export URL and link reports from Sitebulb for both.
+    """)
+    return
+
+
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 1. Upload the list of URLs with embeddings here
     """)
     return
 
@@ -84,17 +104,21 @@ def _(mo):
     return (uploaded_data_table_text,)
 
 
+@app.cell(hide_code=True)
+def _(mo):
+    mo.md(r"""
+    ## 2. Upload the internal link report here
+
+    This will remove any existing links from the matches.
+    """)
+    return
+
+
 @app.cell
 def _(mo):
     link_pairs_uploader = mo.ui.file(kind='area', filetypes=[".csv", ".parquet"])
 
-    mo.vstack([
-        mo.md('''
-        ## Existing links
-        Upload a Sitebulb link report for the site. This will remove any existing links from the matches.
-        '''),
-        link_pairs_uploader  
-    ])
+    link_pairs_uploader
     return (link_pairs_uploader,)
 
 
@@ -117,12 +141,12 @@ def _(cosine_similarity, df, embeds_table, np, pl, slider):
 
     def filtered(df, threshold):
         embeddings = df["embedding"].to_list()
-    
+
         scores = [
             round(cosine_similarity(np.asarray(x), target_vector) * 100, 2)
             for x in embeddings
         ]
-    
+
         return (
             df.with_columns(
                 pl.Series("Similarity Score", scores, dtype=pl.Float64)
